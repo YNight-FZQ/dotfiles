@@ -1,0 +1,48 @@
+{
+    "sandbox": {
+        "enabled": true,
+        "allowUnsandboxedCommands": false,
+        "filesystem": {
+            "denyRead": [
+                "~/.ssh",
+                "~/.gnupg",
+                "~/.aws",
+                "~/.kube",
+                "~/.npmrc",
+                "~/.netrc",
+                "~/.pypirc",
+                "~/.docker/config.json",
+                "~/.config/gcloud"
+            ],
+            "denyWrite": [
+                "~/.ssh",
+                "~/.gnupg",
+                "~/.aws",
+                "~/.kube"
+            ]
+        }
+    },
+    "disableBypassPermissionsMode": "disable",
+    "permissions": {
+        "deny": [
+            "Bash(sudo *)",
+            "Bash(rm -rf /)",
+            "Bash(rm -rf ~)",
+            "Bash(chmod 777 *)",
+            "Bash(chown *)",
+            "Bash(mkfs *)",
+            "Bash(dd *)",
+            "Bash(chattr *)",
+
+            "Read(~/.ssh/**)",
+            "Read(~/.gnupg/**)",
+            "Read(~/.aws/**)",
+            "Read(~/.kube/**)",
+            "Read(~/.npmrc)",
+            "Read(~/.netrc)",
+            "Read(~/.pypirc)",
+            "Read(~/.docker/config.json)",
+            "Read(~/.config/gcloud/**)"
+        ]
+    }
+}
