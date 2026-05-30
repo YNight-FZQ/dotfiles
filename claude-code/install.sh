@@ -23,6 +23,7 @@ elif [ "$OS" = "Linux" ]; then
     MANAGED_TARGET="/etc/claude-code/managed-settings.json"
 else
     echo "❌ 不支持的操作系统: $OS"
+    echo "   支持: macOS, Linux, WSL2"
     exit 1
 fi
 
