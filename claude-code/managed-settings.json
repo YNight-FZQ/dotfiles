@@ -2,6 +2,12 @@
     "sandbox": {
         "enabled": true,
         "allowUnsandboxedCommands": false,
+        "excludedCommands": [
+            "gh ",
+            "git ",
+            "docker "
+        ],
+        "enableWeakerNetworkIsolation": true,
         "filesystem": {
             "denyRead": [
                 "~/.ssh",

@@ -3,7 +3,6 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MANAGED_SRC="$SCRIPT_DIR/managed-settings.json"
-MANAGED_TARGET="/Library/Application Support/ClaudeCode/managed-settings.json"
 
 if [ ! -f "$MANAGED_SRC" ]; then
     echo "❌ 找不到 managed-settings.json"
@@ -16,20 +15,38 @@ if ! python3 -c "import json; json.load(open('$MANAGED_SRC'))" 2>/dev/null; then
     exit 1
 fi
 
-echo "📦 安装 Claude Code Managed 设置..."
+OS="$(uname)"
 
-# 创建目标目录
-sudo mkdir -p "$(dirname "$MANAGED_TARGET")"
+if [ "$OS" = "Darwin" ]; then
+    MANAGED_TARGET="/Library/Application Support/ClaudeCode/managed-settings.json"
+elif [ "$OS" = "Linux" ]; then
+    MANAGED_TARGET="/etc/claude-code/managed-settings.json"
+else
+    echo "❌ 不支持的操作系统: $OS"
+    exit 1
+fi
 
-# 复制文件
-sudo cp "$MANAGED_SRC" "$MANAGED_TARGET"
+MANAGED_DIR="$(dirname "$MANAGED_TARGET")"
 
-# 设置权限
-sudo chmod 644 "$MANAGED_TARGET"
+echo "📦 安装 Claude Code Managed 设置 ($OS)..."
 
-echo "✅ 安装完成"
+mkdir -p "$MANAGED_DIR"
+
+if [ "$EUID" -eq 0 ]; then
+    cp "$MANAGED_SRC" "$MANAGED_TARGET"
+else
+    sudo cp "$MANAGED_SRC" "$MANAGED_TARGET"
+fi
+
+if [ "$EUID" -eq 0 ]; then
+    chmod 644 "$MANAGED_TARGET"
+else
+    sudo chmod 644 "$MANAGED_TARGET"
+fi
+
+echo "✅ 安装完成 → $MANAGED_TARGET"
 echo ""
 echo "生效方式："
-echo "  1. 退出当前 Claude Code 会话（/exit 或 Ctrl+C）"
+echo "  1. 退出当前 Claude Code 会话"
 echo "  2. 重新启动 Claude Code"
 echo "  3. 运行 /status 确认 \"Enterprise managed settings (file)\" 已出现"
