@@ -7,13 +7,13 @@ Claude Code 安全防护配置，跨设备一键部署。
 发布到 GitHub/Gitea 后，任意设备一行命令安装：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/<user>/dotfiles/main/claude-code/install-remote.sh | sudo bash
+curl -fsSL https://raw.githubusercontent.com/YNight-FZQ/dotfiles/main/claude-code/install-remote.sh | sudo bash
 ```
 
 或：
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/<user>/dotfiles/main/claude-code/install-remote.sh | sudo bash
+wget -qO- https://raw.githubusercontent.com/YNight-FZQ/dotfiles/main/claude-code/install-remote.sh | sudo bash
 ```
 
 > 安装后重启 Claude Code，运行 `/status` 确认 `Enterprise managed settings (file)` 已出现。
