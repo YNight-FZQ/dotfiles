@@ -1,0 +1,96 @@
+name: Sync to Gitea & Gitee
+
+on:
+  push:
+    branches: ["*"]
+    tags: ["*"]
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup SSH key for Gitee
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SYNC_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          echo "Host gitee.com" >> ~/.ssh/config
+          echo "    IdentityFile ~/.ssh/id_ed25519" >> ~/.ssh/config
+          echo "    StrictHostKeyChecking no" >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
+
+      - name: Configure git
+        run: |
+          # GitHub: 用 GH_PAT 认证
+          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "git@github.com:"
+          git config --global url."https://x-access-token:${{ secrets.GH_PAT }}@github.com/".insteadOf "https://github.com/"
+          # Gitea: 用 GITEA_TOKEN 认证
+          git config --global url."https://x-access-token:${{ secrets.GITEA_TOKEN }}@git.fangzuquan.tk/".insteadOf "https://git.fangzuquan.tk/"
+          # 增大 HTTP 缓冲区避免大仓库 413 错误
+          git config --global http.postBuffer 524288000
+
+      - name: Sync
+        env:
+          GITEA_TOKEN: ${{ secrets.GITEA_TOKEN }}
+        run: |
+          REPO_NAME="${{ github.event.repository.name }}"
+          REPO_DIR="/tmp/$REPO_NAME"
+          GITEA_HOST="git.fangzuquan.tk"
+          GITEA_ORG="YNightOrg"
+          GITEA_USER="YNight"
+
+          echo "克隆仓库..."
+          if ! git clone --bare "git@github.com:${{ github.repository }}.git" "$REPO_DIR" 2>&1; then
+            echo "克隆失败"
+            exit 1
+          fi
+          cd "$REPO_DIR"
+
+          # 增大 HTTP 缓冲区避免大仓库 413 错误
+          git config http.postBuffer 524288000
+
+          # 获取所有引用（排除 GitHub PR 引用，Gitea 不支持）
+          REFS_TO_PUSH=$(git for-each-ref --format='%(refname)' | grep -v '^refs/pull/')
+
+          # 查找 Gitea 仓库所在命名空间
+          GITEA_NS="$GITEA_ORG"
+          HTTP_CODE_ORG=$(curl -s -o /dev/null -w "%{http_code}" "https://$GITEA_HOST/api/v1/repos/$GITEA_ORG/$REPO_NAME")
+          HTTP_CODE_USER=$(curl -s -o /dev/null -w "%{http_code}" "https://$GITEA_HOST/api/v1/repos/$GITEA_USER/$REPO_NAME")
+          if [ "$HTTP_CODE_ORG" = "200" ]; then
+            GITEA_NS="$GITEA_ORG"
+          elif [ "$HTTP_CODE_USER" = "200" ]; then
+            GITEA_NS="$GITEA_USER"
+          fi
+
+          # 检查并取消归档
+          ARCHIVED=$(curl -s "https://$GITEA_HOST/api/v1/repos/$GITEA_NS/$REPO_NAME" -H "Authorization: token $GITEA_TOKEN" | jq -r '.archived')
+          if [ "$ARCHIVED" = "true" ]; then
+            echo "Gitea: 仓库已归档，先取消归档"
+            curl -s -X PATCH "https://$GITEA_HOST/api/v1/repos/$GITEA_NS/$REPO_NAME" \
+              -H "Authorization: token $GITEA_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d '{"archived": false}' > /dev/null
+          fi
+
+          echo "同步到 Gitea ($GITEA_NS/$REPO_NAME)..."
+          for attempt in 1 2 3; do
+            if echo "$REFS_TO_PUSH" | xargs git push --force "https://x-access-token:$GITEA_TOKEN@$GITEA_HOST/$GITEA_NS/$REPO_NAME.git" 2>&1; then
+              echo "Gitea: 推送成功"
+              break
+            fi
+            echo "Gitea 推送失败（第 $attempt 次），重试中..."
+            sleep 5
+          done
+
+          echo "同步到 Gitee..."
+          for attempt in 1 2 3; do
+            if echo "$REFS_TO_PUSH" | xargs git push --force "git@gitee.com:fang-zuquan/$REPO_NAME.git" 2>&1; then
+              echo "Gitee: 推送成功"
+              break
+            fi
+            echo "Gitee 推送失败（第 $attempt 次），重试中..."
+            sleep 5
+          done
+
+          cd - && rm -rf "$REPO_DIR"
