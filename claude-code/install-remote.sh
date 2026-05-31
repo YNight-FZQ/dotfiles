@@ -1,71 +1,23 @@
 #!/bin/bash
 set -e
 
-# Claude Code Managed Settings 一键安装脚本
-# macOS:  curl -fsSL https://raw.githubusercontent.com/YNight-FZQ/dotfiles/main/claude-code/install-remote.sh | sudo bash
-# Linux:  curl -fsSL https://raw.githubusercontent.com/YNight-FZQ/dotfiles/main/claude-code/install-remote.sh | sudo bash
-# WSL2:   curl -fsSL https://raw.githubusercontent.com/YNight-FZQ/dotfiles/main/claude-code/install-remote.sh | sudo bash
+# Claude Code Managed Settings + 状态栏 一键安装脚本
+# 完整安装（含状态栏）：
+#   curl -fsSL https://raw.githubusercontent.com/YNight-FZQ/dotfiles/main/claude-code/install-remote.sh | sudo bash -s -- --with-statusline
+# 仅安装 Managed 设置（默认）：
+#   curl -fsSL https://raw.githubusercontent.com/YNight-FZQ/dotfiles/main/claude-code/install-remote.sh | sudo bash
 
-MANAGED_CONTENT='{
-    "sandbox": {
-        "enabled": true,
-        "allowUnsandboxedCommands": false,
-        "failIfUnavailable": false,
-        "excludedCommands": [
-            "gh ",
-            "git ",
-            "docker "
-        ],
-        "enableWeakerNetworkIsolation": true,
-        "enableWeakerNestedSandbox": true,
-        "network": {
-            "allowAllUnixSockets": true,
-            "allowLocalBinding": true
-        },
-        "filesystem": {
-            "denyRead": [
-                "~/.ssh",
-                "~/.gnupg",
-                "~/.aws",
-                "~/.kube",
-                "~/.npmrc",
-                "~/.netrc",
-                "~/.pypirc",
-                "~/.docker/config.json",
-                "~/.config/gcloud"
-            ],
-            "denyWrite": [
-                "~/.ssh",
-                "~/.gnupg",
-                "~/.aws",
-                "~/.kube"
-            ]
-        }
-    },
-    "disableBypassPermissionsMode": "disable",
-    "permissions": {
-        "deny": [
-            "Bash(sudo *)",
-            "Bash(rm -rf /)",
-            "Bash(rm -rf ~)",
-            "Bash(chmod 777 *)",
-            "Bash(chown *)",
-            "Bash(mkfs *)",
-            "Bash(dd *)",
-            "Bash(chattr *)",
+REPO_RAW="https://raw.githubusercontent.com/YNight-FZQ/dotfiles/main/claude-code"
+MANAGED_URL="$REPO_RAW/managed-settings.json"
+STATUSLINE_URL="$REPO_RAW/statusline.sh"
 
-            "Read(~/.ssh/**)",
-            "Read(~/.gnupg/**)",
-            "Read(~/.aws/**)",
-            "Read(~/.kube/**)",
-            "Read(~/.npmrc)",
-            "Read(~/.netrc)",
-            "Read(~/.pypirc)",
-            "Read(~/.docker/config.json)",
-            "Read(~/.config/gcloud/**)"
-        ]
-    }
-}'
+# 解析参数
+INSTALL_STATUSLINE=false
+for arg in "$@"; do
+    if [ "$arg" = "--with-statusline" ]; then
+        INSTALL_STATUSLINE=true
+    fi
+done
 
 # 检查 sudo 权限
 if [ "$EUID" -ne 0 ]; then
@@ -73,7 +25,37 @@ if [ "$EUID" -ne 0 ]; then
     exit 1
 fi
 
+# 检查 curl 可用性
+if ! command -v curl &>/dev/null; then
+    echo "❌ 需要 curl，请先安装: sudo apt install curl / brew install curl"
+    exit 1
+fi
+
 OS="$(uname)"
+
+# 下载配置文件
+echo "📥 下载 managed-settings.json..."
+MANAGED_TMP="$(mktemp)"
+if ! curl -fsSL "$MANAGED_URL" -o "$MANAGED_TMP"; then
+    echo "❌ 下载失败，请检查网络连接"
+    rm -f "$MANAGED_TMP"
+    exit 1
+fi
+
+# 验证 JSON 语法
+if command -v python3 &>/dev/null; then
+    if ! python3 -c "import json; json.load(open('$MANAGED_TMP'))" 2>/dev/null; then
+        echo "❌ 下载的配置文件 JSON 格式错误"
+        rm -f "$MANAGED_TMP"
+        exit 1
+    fi
+elif command -v jq &>/dev/null; then
+    if ! jq empty "$MANAGED_TMP" 2>/dev/null; then
+        echo "❌ 下载的配置文件 JSON 格式错误"
+        rm -f "$MANAGED_TMP"
+        exit 1
+    fi
+fi
 
 if [ "$OS" = "Darwin" ]; then
     ############## macOS ##############
@@ -81,7 +63,7 @@ if [ "$OS" = "Darwin" ]; then
     MANAGED_TARGET="$MANAGED_DIR/managed-settings.json"
 
     mkdir -p "$MANAGED_DIR"
-    echo "$MANAGED_CONTENT" > "$MANAGED_TARGET"
+    cp "$MANAGED_TMP" "$MANAGED_TARGET"
     chmod 644 "$MANAGED_TARGET"
 
     echo "✅ Claude Code Managed 设置已安装 (macOS)"
@@ -117,6 +99,7 @@ elif [ "$OS" = "Linux" ]; then
             echo "   Ubuntu/Debian: sudo apt install bubblewrap socat"
             echo "   Fedora:        sudo dnf install bubblewrap socat"
             echo "   Arch:          sudo pacman -S bubblewrap socat"
+            rm -f "$MANAGED_TMP"
             exit 1
         fi
     fi
@@ -151,7 +134,7 @@ elif [ "$OS" = "Linux" ]; then
     fi
 
     mkdir -p "$MANAGED_DIR"
-    echo "$MANAGED_CONTENT" > "$MANAGED_TARGET"
+    cp "$MANAGED_TMP" "$MANAGED_TARGET"
     chmod 644 "$MANAGED_TARGET"
 
     if [ "$IS_WSL" = true ]; then
@@ -169,19 +152,26 @@ else
     echo "   - Linux:  /etc/claude-code/managed-settings.json"
     echo "   - WSL2:   /etc/claude-code/managed-settings.json"
     echo "   - Windows: 不支持沙箱（请使用 WSL2）"
+    rm -f "$MANAGED_TMP"
     exit 1
 fi
+
+rm -f "$MANAGED_TMP"
 
 echo ""
 echo "📋 已配置的防护："
 echo "   🔒 沙箱：强制开启，禁止关闭"
-echo "   🛡️  excludedCommands：gh/git/docker 在沙箱外运行"
-echo "   🛡️  denyRead：SSH/GPG/AWS/Kube/npm/netrc/PyPI/Docker/GCP"
+echo "   🛡️  autoAllowBashIfSandboxed：沙箱内 Bash 命令自动允许"
+echo "   🛡️  excludedCommands：git/gh/docker/npm/node/python 等在沙箱外运行"
+echo "   🛡️  denyRead：SSH/GPG/AWS/Kube/npm/netrc/PyPI/Docker/GCP + 证书/密钥文件"
 echo "   🛡️  denyWrite：SSH/GPG/AWS/Kube 目录防篡改"
+echo "   🛡️  allowWrite：npm/pnpm/pip/cargo 缓存 + /tmp/build"
 echo "   🌐 enableWeakerNetworkIsolation：允许 gh/gcloud 访问系统证书（仅 macOS）"
 echo "   🐧 enableWeakerNestedSandbox：Docker 嵌套沙箱兼容（仅 Linux/WSL2）"
+echo "   🌐 allowedDomains：npm/github/pypi/crates/docker/gitee 等白名单"
 echo "   🔌 allowAllUnixSockets + allowLocalBinding：网络兼容性"
-echo "   🚫 deny：sudo/rm -rf/chmod 777/chown/mkfs/dd/chattr + 凭据读取"
+echo "   ✅ allow：WebFetch 自动允许"
+echo "   🚫 deny：sudo/rm -rf/chmod/chown/mkfs/dd/chattr + 管道注入 + 网络监听 + 凭据/密钥/.env 文件保护"
 echo "   🔑 disableBypassPermissionsMode：禁止跳过权限检查"
 echo ""
 echo "⚠️  已知限制（所有平台）："
@@ -207,3 +197,48 @@ echo "生效方式："
 echo "  1. 退出当前 Claude Code 会话"
 echo "  2. 重新启动 Claude Code"
 echo "  3. 运行 /status 确认 \"Enterprise managed settings (file)\" 已出现"
+
+# ========== 可选：安装状态栏 ==========
+if [ "$INSTALL_STATUSLINE" = true ]; then
+    echo ""
+    echo "🎨 安装 Claude Code 双行状态栏..."
+
+    # 依赖检查
+    for cmd in curl jq git bc; do
+        if ! command -v "$cmd" &>/dev/null; then
+            if [ "$OS" = "Darwin" ]; then
+                echo "📦 安装依赖: $cmd (brew install $cmd)..."
+                su - "$(logname 2>/dev/null || echo "$SUDO_USER")" -c "brew install $cmd" 2>/dev/null || echo "⚠️  无法自动安装 $cmd，请手动安装: brew install $cmd"
+            elif [ "$OS" = "Linux" ]; then
+                if command -v apt-get &>/dev/null; then
+                    apt-get install -y -qq "$cmd"
+                elif command -v dnf &>/dev/null; then
+                    dnf install -y "$cmd"
+                elif command -v pacman &>/dev/null; then
+                    pacman -S --noconfirm "$cmd"
+                else
+                    echo "⚠️  无法自动安装 $cmd，请手动安装"
+                fi
+            fi
+        fi
+    done
+
+    STATUSLINE_TARGET="$(getent passwd "$(logname 2>/dev/null || echo "$SUDO_USER")" 2>/dev/null | cut -d: -f6)/.claude/statusline.sh"
+    if [ -z "$STATUSLINE_TARGET" ] || [ "$STATUSLINE_TARGET" = "/.claude/statusline.sh" ]; then
+        STATUSLINE_TARGET="/root/.claude/statusline.sh"
+    fi
+
+    CLAUDE_DIR="$(dirname "$STATUSLINE_TARGET")"
+    mkdir -p "$CLAUDE_DIR"
+    echo "📥 下载状态栏脚本..."
+    curl -fsSL "$STATUSLINE_URL" -o "$STATUSLINE_TARGET"
+    chmod +x "$STATUSLINE_TARGET"
+
+    echo "✅ 状态栏已安装 → $STATUSLINE_TARGET"
+    echo ""
+    echo "⚙️  需要在 ~/.claude/settings.json 中添加以下配置："
+    echo '   "statusLine": {'
+    echo '     "command": "~/.claude/statusline.sh",'
+    echo '     "type": "command"'
+    echo '   }'
+fi

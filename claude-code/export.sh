@@ -29,6 +29,19 @@ fi
 chmod 644 "$SCRIPT_DIR/managed-settings.json"
 
 echo "✅ 已导出到 $SCRIPT_DIR/managed-settings.json"
+
+# 导出状态栏
+STATUSLINE_SRC="$HOME/.claude/statusline.sh"
+STATUSLINE_DST="$SCRIPT_DIR/statusline.sh"
+
+if [ -f "$STATUSLINE_SRC" ]; then
+    cp "$STATUSLINE_SRC" "$STATUSLINE_DST"
+    chmod +x "$STATUSLINE_DST"
+    echo "✅ 已导出状态栏 → $STATUSLINE_DST"
+else
+    echo "⚠️  未找到本机状态栏脚本 ($STATUSLINE_SRC)，跳过"
+fi
+
 echo ""
 echo "请检查变更后提交到 Git："
 echo "  cd $SCRIPT_DIR && git diff"

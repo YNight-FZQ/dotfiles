@@ -41,10 +41,12 @@ cd claude-code && ./install.sh
 
 | 文件 | 说明 |
 |---|---|
-| `managed-settings.json` | Managed 设置（最高优先级，项目设置无法覆盖） |
+| `managed-settings.json` | Managed 设置（**唯一数据源**，其他脚本从此文件或远程获取） |
 | `install.sh` | 从本地文件安装（需要 clone 仓库），自动识别平台 |
-| `install-remote.sh` | 一键远程安装（配置内嵌在脚本中，无需 clone），自动识别平台 |
+| `install-remote.sh` | 一键远程安装（自动从 GitHub 下载配置），无需 clone |
 | `export.sh` | 从本机导出当前 Managed 设置到 dotfiles，自动识别平台 |
+
+> 配置只在 `managed-settings.json` 中维护一份，`install-remote.sh` 运行时自动下载，避免重复。
 
 ## 配置内容
 
@@ -53,23 +55,30 @@ cd claude-code && ./install.sh
 | 配置项 | 说明 | 适用平台 |
 |---|---|---|
 | `enabled: true` | 强制开启，项目设置无法关闭 | 全部 |
+| `failIfUnavailable: true` | 沙箱不可用时直接报错，拒绝降级运行 | 全部 |
+| `autoAllowBashIfSandboxed` | 沙箱内的 Bash 命令自动允许，无需逐条确认 | 全部 |
 | `allowUnsandboxedCommands: false` | 禁止逃逸沙箱 | 全部 |
-| `failIfUnavailable: false` | 沙箱不可用时降级运行而非报错 | 全部 |
-| `excludedCommands` | gh/git/docker 在沙箱外运行 | 全部 |
+| `excludedCommands` | git/gh/docker/npm/node/python 等在沙箱外运行 | 全部 |
 | `enableWeakerNetworkIsolation` | 允许 gh/gcloud 访问系统证书 | 仅 macOS |
 | `enableWeakerNestedSandbox` | Docker 嵌套沙箱兼容 | 仅 Linux/WSL2 |
 | `allowAllUnixSockets` | 允许 Unix Socket 连接 | 主要 Linux/WSL2 |
 | `allowLocalBinding` | 允许绑定 localhost 端口 | 仅 macOS |
 | `denyRead` | 保护凭据目录不被读取 | 全部 |
 | `denyWrite` | 保护凭据目录不被篡改 | 全部 |
+| `allowWrite` | npm/pnpm/pip/cargo 缓存 + /tmp/build 白名单 | 全部 |
+| `allowedDomains` | npm/github/pypi/crates/docker/gitee 等域名白名单 | 全部 |
 
-### 权限 deny（应用层防护）
+### 权限（应用层防护）
 
-| 类别 | 拦截规则 |
+| 类别 | 规则 |
 |---|---|
-| 提权 | `sudo *` |
-| 破坏性命令 | `rm -rf /`、`rm -rf ~`、`chmod 777`、`chown`、`mkfs`、`dd`、`chattr` |
-| 凭据读取 | SSH、GPG、AWS、Kube、npm、netrc、PyPI、Docker、GCP |
+| allow | `WebFetch` 自动允许 |
+| 提权 | 拦截 `sudo *` |
+| 破坏性命令 | 拦截 `rm -rf /`、`rm -rf ~`、`chmod 777`、`chown`、`mkfs`、`dd`、`chattr` |
+| 管道注入 | 拦截 `curl/wget \| sh/bash` |
+| 网络监听 | 拦截 `nc -l`、`ncat` |
+| 凭据保护 | 拒绝读取 SSH、GPG、AWS、Kube、npm、netrc、PyPI、Docker、GCP 配置 |
+| 密钥文件 | 拒绝读取 `.pem`、`.key`、`.p12`、`.pfx`、`id_rsa*`、`id_ed25519*`、`.env`、`terraform.tfstate` |
 
 ### 其他
 
